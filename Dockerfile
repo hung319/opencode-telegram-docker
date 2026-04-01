@@ -1,19 +1,16 @@
-# Sử dụng Bun Alpine image cho dung lượng siêu nhẹ
-FROM oven/bun:alpine
+# Sử dụng Node.js bản slim (glibc) - Rất nhẹ và chuẩn bài cho các thư viện C++
+FROM node:20-slim
 
-# Cài đặt git, bash và curl (OpenCode Agent cần các công cụ này để thao tác)
-RUN apk add --no-cache git bash curl
+# Cài đặt git, bash và curl (cần thiết cho OpenCode Agent)
+RUN apt-get update && apt-get install -y git bash curl && rm -rf /var/lib/apt/lists/*
 
-# Tạo symlink 'node' trỏ tới 'bun' để tương thích với các script yêu cầu Node.js
-RUN ln -s $(which bun) /usr/local/bin/node
+# Cài đặt OpenCode và Telegram Bot qua npm
+RUN npm install -g opencode-ai @grinev/opencode-telegram-bot
 
-# SỬA LỖI Ở ĐÂY: Dùng đúng tên package là 'opencode-ai'
-RUN bun install -g opencode-ai @grinev/opencode-telegram-bot
-
-# Đặt thư mục làm việc mặc định là /workspace (nơi chứa mã nguồn của bạn)
+# Đặt thư mục làm việc mặc định là /workspace
 WORKDIR /workspace
 
-# Tạo script khởi chạy cả 2 tiến trình: OpenCode chạy ngầm, Bot chạy chính
+# Tạo script khởi chạy
 RUN echo '#!/bin/sh' > /start.sh && \
     echo 'echo "🚀 Đang khởi động OpenCode server..."' >> /start.sh && \
     echo 'opencode serve & ' >> /start.sh && \
