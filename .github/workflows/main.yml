@@ -44,7 +44,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "🔥 Chạy thủ công (Manual trigger). Bỏ qua kiểm tra, bắt buộc build đè..."
             echo "skip=false" >> $GITHUB_OUTPUT
-          else if DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect ghcr.io/${{ steps.repo_name.outputs.repo }}:${{ steps.get_version.outputs.tag }} > /dev/null 2>&1; then
+          elif DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect ghcr.io/${{ steps.repo_name.outputs.repo }}:${{ steps.get_version.outputs.tag }} > /dev/null 2>&1; then
             echo "✅ Version ${{ steps.get_version.outputs.tag }} đã được build. Bỏ qua..."
             echo "skip=true" >> $GITHUB_OUTPUT
           else
