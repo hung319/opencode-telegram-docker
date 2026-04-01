@@ -1,0 +1,73 @@
+name: Auto Build on Upstream Release
+
+on:
+  schedule:
+    # Kiểm tra tự động mỗi 6 tiếng. Bạn có thể đổi cron syntax theo ý muốn.
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Vẫn giữ lại để bạn có thể bấm nút chạy thủ công
+
+# Phân quyền cần thiết để ghi image lên GitHub Container Registry
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Chuyển tên repo của bạn thành chữ thường (Bắt buộc cho Docker tags)
+      - name: Set lowercase repository name
+        id: repo_name
+        run: echo "repo=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # 2. Lấy version mới nhất từ repo gốc
+      - name: Get latest release from upstream
+        id: get_version
+        run: |
+          LATEST_TAG=$(curl -s https://api.github.com/repos/grinev/opencode-telegram-bot/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Bản release mới nhất bên repo gốc là: $LATEST_TAG"
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      # 3. Đăng nhập vào GHCR
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 4. Kiểm tra xem version này đã được bạn build trước đó chưa
+      - name: Check if image already exists
+        id: check_build
+        run: |
+          # Thử lấy thông tin manifest của image với tag mới nhất
+          if DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect ghcr.io/${{ steps.repo_name.outputs.repo }}:${{ steps.get_version.outputs.tag }} > /dev/null 2>&1; then
+            echo "✅ Version ${{ steps.get_version.outputs.tag }} đã được build. Bỏ qua..."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "🚀 Chưa có version ${{ steps.get_version.outputs.tag }}. Bắt đầu tiến hành build..."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      # 5. Lấy code của bạn về (Chỉ chạy nếu có version mới)
+      - name: Checkout code
+        if: steps.check_build.outputs.skip == 'false'
+        uses: actions/checkout@v4
+
+      # 6. Cài đặt Docker Buildx để build đa nền tảng
+      - name: Set up Docker Buildx
+        if: steps.check_build.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      # 7. Build và Push Image
+      - name: Build and Push Docker Image
+        if: steps.check_build.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          # Gắn 2 tag: một tag 'latest' và một tag theo đúng version gốc (vd: v0.14.1)
+          tags: |
+            ghcr.io/${{ steps.repo_name.outputs.repo }}:latest
+            ghcr.io/${{ steps.repo_name.outputs.repo }}:${{ steps.get_version.outputs.tag }}
